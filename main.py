@@ -2,9 +2,9 @@ import os
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import List
+from typing import List, Optional
 from database import create_document, get_documents
-from schemas import Interest
+from schemas import Interest, MediaItem, EventEntry
 
 app = FastAPI(title="Cluster 1 Youth for Christ API")
 
@@ -57,7 +57,7 @@ def test_database():
     response["database_name"] = "✅ Set" if os.getenv("DATABASE_NAME") else "❌ Not Set"
     return response
 
-# Models for request/response
+# -------------------- Interest (Sign-ups) --------------------
 class InterestCreate(Interest):
     pass
 
@@ -65,12 +65,11 @@ class InterestPublic(BaseModel):
     id: str
     full_name: str
     email: str
-    phone: str | None
-    age: int | None
-    preferred_ministry: str | None
-    message: str | None
+    phone: Optional[str] = None
+    age: Optional[int] = None
+    preferred_ministry: Optional[str] = None
+    message: Optional[str] = None
 
-# Endpoints for interest sign-ups
 @app.post("/api/interests", response_model=dict)
 def create_interest(payload: InterestCreate):
     try:
@@ -95,6 +94,82 @@ def list_interests(limit: int = 50):
                 message=d.get("message"),
             ))
         return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# -------------------- Media (Photos/Videos) --------------------
+class MediaCreate(MediaItem):
+    pass
+
+class MediaPublic(BaseModel):
+    id: str
+    kind: str
+    url: str
+    caption: Optional[str] = None
+    taken_at: Optional[str] = None
+
+@app.post("/api/media", response_model=dict)
+def create_media(payload: MediaCreate):
+    try:
+        inserted_id = create_document("mediaitem", payload)
+        return {"id": inserted_id, "message": "Media saved"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/media", response_model=List[MediaPublic])
+def list_media(limit: int = 50):
+    try:
+        docs = get_documents("mediaitem", limit=limit)
+        items: List[MediaPublic] = []
+        for d in docs:
+            items.append(MediaPublic(
+                id=str(d.get("_id")),
+                kind=d.get("kind"),
+                url=str(d.get("url")),
+                caption=d.get("caption"),
+                taken_at=d.get("taken_at"),
+            ))
+        return items
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# -------------------- Events (Past Events) --------------------
+class EventCreate(EventEntry):
+    pass
+
+class EventPublic(BaseModel):
+    id: str
+    title: str
+    date: str
+    location: Optional[str] = None
+    description: Optional[str] = None
+    photos: Optional[List[str]] = None
+    video: Optional[str] = None
+
+@app.post("/api/events", response_model=dict)
+def create_event(payload: EventCreate):
+    try:
+        inserted_id = create_document("evententry", payload)
+        return {"id": inserted_id, "message": "Event saved"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/events", response_model=List[EventPublic])
+def list_events(limit: int = 50):
+    try:
+        docs = get_documents("evententry", limit=limit)
+        items: List[EventPublic] = []
+        for d in docs:
+            items.append(EventPublic(
+                id=str(d.get("_id")),
+                title=d.get("title"),
+                date=d.get("date"),
+                location=d.get("location"),
+                description=d.get("description"),
+                photos=[str(p) for p in (d.get("photos") or [])],
+                video=str(d.get("video")) if d.get("video") else None,
+            ))
+        return items
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
